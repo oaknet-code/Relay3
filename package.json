@@ -1,15 +1,15 @@
 {
-  "name": "backend",
+  "name": "relay-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "src/server.js",
+  "description": "Relay Backend API - Separate deployment for Hostinger",
+  "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["relay", "api", "express", "mongodb"],
+  "author": "Oaknet",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {

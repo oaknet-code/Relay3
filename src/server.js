@@ -1,9 +1,9 @@
-require("dotenv").config();
+const path = require("path");
+require("dotenv").config({ path: path.resolve(__dirname, "../.env") })
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const mongoSanitize = require("express-mongo-sanitize");
-const path = require("path");
 const connectDB = require("./config/db");
 const { generalLimiter } = require("./middleware/rateLimiters");
 
@@ -44,19 +44,15 @@ app.use(mongoSanitize());
 // limiter (see auth.routes.js).
 app.use("/api", generalLimiter);
 
-// Serve static frontend files (build output from Vite)
-const frontendPath = path.join(__dirname, "../../frontend/dist");
-app.use(express.static(frontendPath));
-
 // Routes
 app.use("/api/auth", require("./routes/auth.routes"));
 app.use("/api/sitekits", require("./routes/sitekits.routes"));
 app.use("/api/dispatch", require("./routes/dispatch.routes"));
 app.use("/api/fieldops", require("./routes/fieldops.routes"));
 
-// Serve React app for all non-API routes (SPA fallback)
-app.get("*", (req, res) => {
-  res.sendFile(path.join(frontendPath, "index.html"));
+// API health check endpoint
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", message: "Relay Backend is running" });
 });
 
 // Centralized fallback error handler — keeps stack traces out of
