@@ -25,7 +25,7 @@ app.use(helmet());
 
 // CORS: restricted to the actual frontend origin instead of "*". Set
 // FRONTEND_URL in backend/.env — defaults to the local Vite dev server.
-const allowedOrigin = process.env.FRONTEND_URL || "http://localhost:5173";
+const allowedOrigin = process.env.FRONTEND_URL || "https://oaknetrelay.oaknetbusiness.com";
 app.use(
   cors({
     origin: allowedOrigin,
