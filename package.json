@@ -24,7 +24,7 @@
     "express": "^4.22.2",
     "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^8.5.2",
-    "formidable": "^3.2.4",
+    "formidable": "^3.5.3",
     "helmet": "^7.0.0",
     "joi": "^17.9.2",
     "jsonwebtoken": "^9.0.3",
