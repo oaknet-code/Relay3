@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { login, registerClient } = require("../controllers/auth.controller");
+const { login, registerClient, changePassword } = require("../controllers/auth.controller");
 const { protect } = require("../middleware/auth.middleware");
 const { authorize } = require("../middleware/role.middleware");
 const { loginLimiter } = require("../middleware/rateLimiters");
@@ -21,5 +21,8 @@ router.post(
   validateBody(registerClientSchema),
   registerClient
 );
+
+// PUT /api/auth/change-password — requires authenticated user
+router.put("/change-password", protect, changePassword);
 
 module.exports = router;
