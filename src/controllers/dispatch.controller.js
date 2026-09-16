@@ -6,6 +6,7 @@ const GatePass = require("../models/GatePass");
 const Link = require("../models/Link");
 const { recordAudit } = require("../utils/audit");
 const { assertTransition, InvalidTransitionError } = require("../services/stateMachine");
+const PDFDocument = require("pdfkit");
 
 const genWaybillId = () => "GP-" + Math.floor(2000 + Math.random() * 8000);
 
@@ -202,6 +203,91 @@ exports.getGatePass = async (req, res) => {
     }
 
     res.json(gatePass);
+  } catch (err) {
+    res.status(500).json({ message: "Server error: " + err.message });
+  }
+};
+
+// GET /api/dispatch/:id/gatepass/pdf
+// Download gate pass as PDF
+exports.getGatePassPDF = async (req, res) => {
+  try {
+    const dispatch = await Dispatch.findById(req.params.id);
+    if (!dispatch) {
+      return res.status(404).json({ message: "Dispatch not found" });
+    }
+
+    const gatePass = await GatePass.findOne({
+      dispatch: dispatch._id,
+      deletedAt: null,
+    });
+
+    if (!gatePass) {
+      return res.status(404).json({ message: "Gate pass not found for this dispatch" });
+    }
+
+    // Create PDF
+    const doc = new PDFDocument({ size: "A4", margin: 40 });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="gatepass-${gatePass.gatePassNumber}.pdf"`);
+    doc.pipe(res);
+
+    // Title
+    doc.fontSize(20).font("Helvetica-Bold").text("GATE PASS", { align: "center" });
+    doc.moveDown(0.5);
+    doc.fontSize(14).font("Helvetica").text(gatePass.gatePassNumber, { align: "center" });
+    doc.moveDown(1);
+
+    // Header info
+    doc.fontSize(11).font("Helvetica-Bold").text("DISPATCH DETAILS");
+    doc.fontSize(10).font("Helvetica");
+    doc.text(`Kit ID: ${gatePass.kitId}`);
+    doc.text(`Link ID: ${gatePass.linkId || "N/A"}`);
+    doc.text(`Issued: ${new Date(gatePass.dispatchedAt).toLocaleString()}`);
+    doc.text(`Dispatched By: ${gatePass.dispatchedBy}`);
+    doc.moveDown(0.5);
+
+    // Vehicle & Driver
+    doc.fontSize(11).font("Helvetica-Bold").text("VEHICLE & DRIVER");
+    doc.fontSize(10).font("Helvetica");
+    doc.text(`Vehicle: ${gatePass.vehicle?.plate || "N/A"} (${gatePass.vehicle?.make})`);
+    doc.text(`Driver: ${gatePass.driver?.name || "N/A"} · ${gatePass.driver?.phone || ""}`);
+    doc.moveDown(0.5);
+
+    // Assets
+    if (gatePass.assets && gatePass.assets.length > 0) {
+      doc.fontSize(11).font("Helvetica-Bold").text("ASSETS");
+      doc.fontSize(9).font("Helvetica");
+      gatePass.assets.forEach((asset) => {
+        doc.text(`• ${asset.serial} (${asset.type} · ${asset.model})`);
+      });
+      doc.moveDown(0.5);
+    }
+
+    // Consumables
+    if (gatePass.consumables && gatePass.consumables.length > 0) {
+      doc.fontSize(11).font("Helvetica-Bold").text("CONSUMABLES");
+      doc.fontSize(9).font("Helvetica");
+      gatePass.consumables.forEach((consumable) => {
+        doc.text(`• ${consumable.qty} ${consumable.unit} · ${consumable.type} (${consumable.model})`);
+      });
+      doc.moveDown(0.5);
+    }
+
+    // Destination
+    doc.fontSize(11).font("Helvetica-Bold").text("DESTINATION");
+    doc.fontSize(10).font("Helvetica");
+    doc.text(`Warehouse: ${gatePass.warehouseLocation}`);
+    doc.text(`Destination: ${gatePass.destination}`);
+    doc.moveDown(1);
+
+    // Footer
+    doc.fontSize(9).font("Helvetica").text("Authorized by warehouse manager on dispatch. Keep this document with shipment.", {
+      align: "center",
+      color: "#666",
+    });
+
+    doc.end();
   } catch (err) {
     res.status(500).json({ message: "Server error: " + err.message });
   }
