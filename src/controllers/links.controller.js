@@ -59,7 +59,7 @@ exports.getLink = async (req, res) => {
  */
 exports.createLink = async (req, res) => {
   try {
-    const { linkId, name, client, siteA, siteB, band, ...rest } = req.body;
+    const { linkId, name, client, siteA, siteB, band, pathLengthKm, dishSize, notes, requiredHardware } = req.body;
 
     if (!linkId) {
       return res.status(400).json({ message: "linkId required" });
@@ -78,10 +78,13 @@ exports.createLink = async (req, res) => {
       siteA: siteA || {},
       siteB: siteB || {},
       band,
+      pathLengthKm,
+      dishSize,
+      notes,
+      requiredHardware,
       status: "PLANNED",
       createdBy: req.user._id,
       updatedBy: req.user._id,
-      ...rest,
     });
 
     await recordAudit({
@@ -109,7 +112,7 @@ exports.createLink = async (req, res) => {
 exports.updateLink = async (req, res) => {
   try {
     const { linkId } = req.params;
-    const { status, kit, ...allowedFields } = req.body;
+    const { status, kit, createdBy, updatedBy, deletedAt, ...bodyFields } = req.body;
 
     // Status changes go through /status endpoint
     if (status !== undefined) {
@@ -117,6 +120,15 @@ exports.updateLink = async (req, res) => {
         .status(400)
         .json({ message: "Use PATCH /links/:linkId/status to change status" });
     }
+
+    // Whitelist only editable fields; reject attempts to set audit/system fields
+    const allowedFields = {};
+    const editableKeys = ["name", "client", "siteA", "siteB", "band", "pathLengthKm", "dishSize", "requiredHardware", "notes"];
+    editableKeys.forEach(key => {
+      if (bodyFields[key] !== undefined) {
+        allowedFields[key] = bodyFields[key];
+      }
+    });
 
     const link = await Link.findOne({ linkId: linkId.toUpperCase(), deletedAt: null });
     if (!link) {

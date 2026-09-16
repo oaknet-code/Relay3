@@ -71,7 +71,7 @@ exports.getAsset = async (req, res) => {
  */
 exports.createAsset = async (req, res) => {
   try {
-    const { serialNumber, assetType, model, macAddress, ...rest } = req.body;
+    const { serialNumber, assetType, model, macAddress, band, condition, location, purchaseDate } = req.body;
 
     if (!serialNumber || !assetType || !model) {
       return res
@@ -93,10 +93,13 @@ exports.createAsset = async (req, res) => {
       assetType,
       model,
       macAddress: macAddress ? macAddress.toUpperCase() : undefined,
+      band,
+      condition,
+      location,
+      purchaseDate,
       status: "STOCKED",
       createdBy: req.user._id,
       updatedBy: req.user._id,
-      ...rest,
     });
 
     await recordAudit({
@@ -123,7 +126,7 @@ exports.createAsset = async (req, res) => {
 exports.updateAsset = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, kit, link, ...allowedFields } = req.body;
+    const { status, kit, link, createdBy, updatedBy, deletedAt, ...bodyFields } = req.body;
 
     // Status changes go through /status endpoint, not PUT
     if (status !== undefined) {
@@ -131,6 +134,15 @@ exports.updateAsset = async (req, res) => {
         .status(400)
         .json({ message: "Use PATCH /assets/:id/status to change status" });
     }
+
+    // Whitelist only editable fields; reject any attempt to set audit/system fields
+    const allowedFields = {};
+    const editableKeys = ["band", "condition", "location", "purchaseDate", "notes"];
+    editableKeys.forEach(key => {
+      if (bodyFields[key] !== undefined) {
+        allowedFields[key] = bodyFields[key];
+      }
+    });
 
     let asset;
     if (id.match(/^[0-9a-fA-F]{24}$/)) {

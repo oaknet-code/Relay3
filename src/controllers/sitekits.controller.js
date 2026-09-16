@@ -148,7 +148,16 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   try {
     const { kitId } = req.params;
-    const { status, link, ...allowedFields } = req.body;
+    const { status, link, createdBy, updatedBy, deletedAt, ...bodyFields } = req.body;
+
+    // Whitelist only editable fields; reject attempts to set audit/system fields
+    const allowedFields = {};
+    const editableKeys = ["name", "band", "components"];
+    editableKeys.forEach(key => {
+      if (bodyFields[key] !== undefined) {
+        allowedFields[key] = bodyFields[key];
+      }
+    });
 
     const kit = await SiteKit.findOne({
       kitId: kitId.toUpperCase(),
