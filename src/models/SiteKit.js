@@ -8,6 +8,15 @@ const ComponentSchema = new mongoose.Schema(
     unit: { type: String, default: "ea", trim: true }, // ea, m, roll, pack...
     qtyRequired: { type: Number, required: true, min: 0 },
     qtyAvailable: { type: Number, required: true, min: 0 },
+
+    // Phase 1: track source of inventory (consumable vs. individual serialized assets)
+    sourceType: {
+      type: String,
+      enum: ["consumable", "serialized"],
+      default: "consumable",
+    },
+    consumable: { type: mongoose.Schema.Types.ObjectId, ref: "Consumable", default: null },
+    assets: { type: [mongoose.Schema.Types.ObjectId], ref: "Asset", default: [] },
   },
   { _id: true }
 );
@@ -17,38 +26,45 @@ const SiteKitSchema = new mongoose.Schema(
     kitId: { type: String, required: true, unique: true, uppercase: true, trim: true }, // KIT-MW01
     name: { type: String, required: true, trim: true },
     band: { type: String, required: true, trim: true },
-    sites: { type: [String], default: [] },
+    link: { type: mongoose.Schema.Types.ObjectId, ref: "Link", default: null },
     status: {
       type: String,
-      enum: ["ready", "incomplete", "pending", "dispatched"],
-      default: "pending",
+      enum: ["DRAFT", "READY_FOR_STAGING", "STAGING", "STAGED", "DISPATCHED", "INSTALLED"],
+      default: "DRAFT",
     },
     components: { type: [ComponentSchema], default: [] },
     // Set when the whole kit has been sent out via a dispatch; recomputeStatus()
     // leaves status alone once this is true so it doesn't flip back to
-    // ready/incomplete just because stock elsewhere changed.
+    // READY_FOR_STAGING just because stock elsewhere changed.
     dispatchedAt: { type: Date, default: null },
+
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    deletedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
 // Recomputes `status` from the component quantities. Call after any
-// import or dispatch that changes qtyAvailable. Does not run if the
+// import, allocation, or dispatch that changes qtyAvailable. Does not run if the
 // kit has already been fully dispatched.
 SiteKitSchema.methods.recomputeStatus = function recomputeStatus() {
   if (this.dispatchedAt) {
-    this.status = "dispatched";
+    this.status = "DISPATCHED";
     return this.status;
   }
+  // Don't clobber phase-2+ states that are managed by other workflows
+  if (["STAGING", "STAGED", "INSTALLED"].includes(this.status)) {
+    return this.status;
+  }
+  // Empty kit is DRAFT until components are added
   if (!this.components.length) {
-    this.status = "pending";
+    this.status = "DRAFT";
     return this.status;
   }
+  // Check if all components have sufficient stock allocated
   const allMet = this.components.every((c) => c.qtyAvailable >= c.qtyRequired);
-  const anyZero = this.components.some((c) => c.qtyAvailable === 0);
-  if (allMet) this.status = "ready";
-  else if (anyZero) this.status = "pending";
-  else this.status = "incomplete";
+  this.status = allMet ? "READY_FOR_STAGING" : "DRAFT";
   return this.status;
 };
 

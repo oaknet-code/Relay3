@@ -1,7 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const router = express.Router();
-const { list, getOne, importExcel } = require("../controllers/sitekits.controller");
+const { list, getOne, create, update, delete: deleteKit, allocate, importExcel } = require("../controllers/sitekits.controller");
 const { protect } = require("../middleware/auth.middleware");
 const { authorize } = require("../middleware/role.middleware");
 
@@ -31,11 +31,23 @@ router.use(protect, authorize("admin", "warehouse_manager", "warehouse_operator"
 // GET /api/sitekits
 router.get("/", list);
 
+// POST /api/sitekits — Create kit
+router.post("/", authorize("admin", "warehouse_manager"), create);
+
 // POST /api/sitekits/import  (multipart/form-data, field "file")
 // Only roles that actually manage stock can overwrite kit data.
 router.post("/import", authorize("admin", "warehouse_manager"), upload.single("file"), importExcel);
 
 // GET /api/sitekits/:kitId
 router.get("/:kitId", getOne);
+
+// PUT /api/sitekits/:kitId — Update kit
+router.put("/:kitId", authorize("admin", "warehouse_manager"), update);
+
+// DELETE /api/sitekits/:kitId — Delete kit
+router.delete("/:kitId", authorize("admin"), deleteKit);
+
+// POST /api/sitekits/:kitId/allocate — Allocate assets to kit
+router.post("/:kitId/allocate", authorize("admin", "warehouse_manager", "warehouse_operator"), allocate);
 
 module.exports = router;

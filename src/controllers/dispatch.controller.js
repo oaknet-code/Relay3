@@ -64,11 +64,11 @@ exports.createDispatch = async (req, res) => {
     kit.recomputeStatus();
     // If this dispatch drained every component to zero, treat the kit as
     // fully sent out so recomputeStatus stops flipping it back to
-    // ready/incomplete on its own.
+    // READY_FOR_STAGING on its own.
     const fullyDrained = kit.components.every((c) => c.qtyAvailable === 0);
     if (fullyDrained) {
       kit.dispatchedAt = new Date();
-      kit.status = "dispatched";
+      kit.status = "DISPATCHED";
     }
     await kit.save();
 
