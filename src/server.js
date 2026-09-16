@@ -49,6 +49,7 @@ app.use("/api/auth", require("./routes/auth.routes"));
 app.use("/api/inventory", require("./routes/inventory.routes"));
 app.use("/api/links", require("./routes/links.routes"));
 app.use("/api/sitekits", require("./routes/sitekits.routes"));
+app.use("/api/staging", require("./routes/staging.routes"));
 app.use("/api/dispatch", require("./routes/dispatch.routes"));
 app.use("/api/fieldops", require("./routes/fieldops.routes"));
 

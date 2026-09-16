@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { createDispatch, getOne, list } = require("../controllers/dispatch.controller");
+const { createDispatch, getOne, list, getGatePass } = require("../controllers/dispatch.controller");
 const { protect } = require("../middleware/auth.middleware");
 const { authorize } = require("../middleware/role.middleware");
 
@@ -16,5 +16,8 @@ router.post("/", createDispatch);
 
 // GET /api/dispatch/:id
 router.get("/:id", getOne);
+
+// GET /api/dispatch/:id/gatepass
+router.get("/:id/gatepass", getGatePass);
 
 module.exports = router;

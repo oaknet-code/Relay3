@@ -1,5 +1,11 @@
 const SiteKit = require("../models/SiteKit");
 const Dispatch = require("../models/Dispatch");
+const Asset = require("../models/Asset");
+const Consumable = require("../models/Consumable");
+const GatePass = require("../models/GatePass");
+const Link = require("../models/Link");
+const { recordAudit } = require("../utils/audit");
+const { assertTransition, InvalidTransitionError } = require("../services/stateMachine");
 
 const genWaybillId = () => "GP-" + Math.floor(2000 + Math.random() * 8000);
 
@@ -86,6 +92,67 @@ exports.createDispatch = async (req, res) => {
       dispatchedAt: new Date(),
     });
 
+    // Create Gate Pass for the dispatch
+    try {
+      const link = await Link.findById(kit.link);
+      const assets = await Asset.find({
+        kit: kit._id,
+        status: "STAGED",
+        deletedAt: null,
+      });
+
+      const consumablesList = [];
+      for (const comp of kit.components) {
+        if (comp.sourceType === "consumable") {
+          consumablesList.push({
+            type: comp.type,
+            model: comp.model,
+            qty: comp.qtyRequired,
+            unit: comp.unit,
+          });
+        }
+      }
+
+      const gatePass = await GatePass.create({
+        gatePassNumber: dispatch.waybillId,
+        dispatch: dispatch._id,
+        dispatchId: dispatch.waybillId,
+        kit: kit._id,
+        kitId: kit.kitId,
+        link: kit.link,
+        linkId: link?.linkId,
+        clientName: link?.clientName,
+        vehicle,
+        driver,
+        assets: assets.map((a) => ({
+          assetId: a._id,
+          serial: a.serialNumber,
+          type: a.assetType,
+          model: a.model,
+        })),
+        consumables: consumablesList,
+        warehouseLocation: "Main Warehouse",
+        destination: link?.siteA?.name || "Site",
+        dispatchedAt: new Date(),
+        dispatchedBy: dispatch.dispatchedBy,
+        createdBy: req.user._id,
+      });
+
+      // Record audit
+      await recordAudit({
+        entityType: "SiteKit",
+        entityId: kit._id,
+        action: "STATUS_CHANGE",
+        fromStatus: "STAGED",
+        toStatus: "DISPATCHED",
+        user: req.user,
+        notes: `Dispatched with gate pass ${gatePass.gatePassNumber}`,
+      });
+    } catch (gpErr) {
+      console.error("Gate Pass creation failed:", gpErr);
+      // Don't fail the dispatch if gate pass fails
+    }
+
     res.status(201).json({ dispatch, kit });
   } catch (err) {
     res.status(500).json({ message: "Server error: " + err.message });
@@ -115,3 +182,29 @@ exports.list = async (req, res) => {
     res.status(500).json({ message: "Server error: " + err.message });
   }
 };
+
+// GET /api/dispatch/:id/gatepass
+// Fetch gate pass for a dispatch
+exports.getGatePass = async (req, res) => {
+  try {
+    const dispatch = await Dispatch.findById(req.params.id);
+    if (!dispatch) {
+      return res.status(404).json({ message: "Dispatch not found" });
+    }
+
+    const gatePass = await GatePass.findOne({
+      dispatch: dispatch._id,
+      deletedAt: null,
+    });
+
+    if (!gatePass) {
+      return res.status(404).json({ message: "Gate pass not found for this dispatch" });
+    }
+
+    res.json(gatePass);
+  } catch (err) {
+    res.status(500).json({ message: "Server error: " + err.message });
+  }
+};
+
+module.exports = exports;
