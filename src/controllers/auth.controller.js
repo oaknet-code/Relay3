@@ -94,6 +94,57 @@ exports.registerClient = async (req, res) => {
   }
 };
 
+// GET /api/auth/clients — admin-only list of client accounts, so the
+// admin UI has something to show after using register-client.
+exports.listClients = async (req, res) => {
+  try {
+    const clients = await User.find({ role: "client" })
+      .select("firstName lastName email company status createdAt")
+      .sort({ createdAt: -1 });
+
+    res.json(
+      clients.map((c) => ({
+        id: c._id,
+        username: `${c.firstName} ${c.lastName}`.trim(),
+        email: c.email,
+        company: c.company,
+        status: c.status,
+        createdAt: c.createdAt,
+      }))
+    );
+  } catch (err) {
+    res.status(500).json({ message: "Server error: " + err.message });
+  }
+};
+
+// PATCH /api/auth/clients/:id/status — admin-only suspend/reactivate.
+// Scoped to role: "client" so this can't be used to lock out another
+// admin or staff account.
+exports.setClientStatus = async (req, res) => {
+  try {
+    const { status } = req.body; // validated by validateBody(clientStatusSchema)
+
+    const client = await User.findOne({ _id: req.params.id, role: "client" });
+    if (!client) {
+      return res.status(404).json({ message: "Client account not found" });
+    }
+
+    client.status = status;
+    await client.save();
+
+    res.json({
+      id: client._id,
+      username: `${client.firstName} ${client.lastName}`.trim(),
+      email: client.email,
+      company: client.company,
+      status: client.status,
+      createdAt: client.createdAt,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error: " + err.message });
+  }
+};
+
 exports.changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;

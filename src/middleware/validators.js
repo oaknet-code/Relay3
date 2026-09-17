@@ -13,6 +13,10 @@ const registerClientSchema = Joi.object({
   company: Joi.string().trim().max(150).allow("", null),
 });
 
+const clientStatusSchema = Joi.object({
+  status: Joi.string().valid("active", "suspended").required(),
+});
+
 function validateBody(schema) {
   return (req, res, next) => {
     const { error, value } = schema.validate(req.body, { stripUnknown: true });
@@ -24,4 +28,4 @@ function validateBody(schema) {
   };
 }
 
-module.exports = { loginSchema, registerClientSchema, validateBody };
+module.exports = { loginSchema, registerClientSchema, clientStatusSchema, validateBody };

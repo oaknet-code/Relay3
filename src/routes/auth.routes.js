@@ -1,10 +1,10 @@
 const express = require("express");
 const router = express.Router();
-const { login, registerClient, changePassword } = require("../controllers/auth.controller");
+const { login, registerClient, listClients, setClientStatus, changePassword } = require("../controllers/auth.controller");
 const { protect } = require("../middleware/auth.middleware");
 const { authorize } = require("../middleware/role.middleware");
 const { loginLimiter } = require("../middleware/rateLimiters");
-const { loginSchema, registerClientSchema, validateBody } = require("../middleware/validators");
+const { loginSchema, registerClientSchema, clientStatusSchema, validateBody } = require("../middleware/validators");
 
 // POST /api/auth/login — rate-limited (previously unlimited, so brute-forcing
 // passwords had no throttle at all) and input-validated before it ever
@@ -20,6 +20,18 @@ router.post(
   authorize("admin"),
   validateBody(registerClientSchema),
   registerClient
+);
+
+// GET /api/auth/clients — admin-only list of client accounts
+router.get("/clients", protect, authorize("admin"), listClients);
+
+// PATCH /api/auth/clients/:id/status — admin-only suspend/reactivate
+router.patch(
+  "/clients/:id/status",
+  protect,
+  authorize("admin"),
+  validateBody(clientStatusSchema),
+  setClientStatus
 );
 
 // PUT /api/auth/change-password — requires authenticated user
