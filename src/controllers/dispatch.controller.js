@@ -226,66 +226,105 @@ exports.getGatePassPDF = async (req, res) => {
       return res.status(404).json({ message: "Gate pass not found for this dispatch" });
     }
 
-    // Create PDF
-    const doc = new PDFDocument({ size: "A4", margin: 40 });
+    // Create PDF — laid out as a waybill/gate pass: label/value fields,
+    // an items table (assets + consumables together), then a chain-of-
+    // custody signature block.
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="gatepass-${gatePass.gatePassNumber}.pdf"`);
     doc.pipe(res);
 
+    const GRAY = "#666666";
+    const LINE = "#cccccc";
+    const left = doc.page.margins.left;
+    const right = doc.page.width - doc.page.margins.right;
+
+    const hr = () => {
+      doc.moveDown(0.4);
+      doc.strokeColor(LINE).moveTo(left, doc.y).lineTo(right, doc.y).stroke();
+      doc.moveDown(0.6);
+    };
+
+    const field = (label, value) => {
+      doc.fontSize(9).font("Helvetica-Bold").fillColor("#000").text(label.toUpperCase());
+      doc.fontSize(10.5).font("Helvetica").fillColor("#000").text(value || "—");
+      doc.moveDown(0.5);
+    };
+
     // Title
-    doc.fontSize(20).font("Helvetica-Bold").text("GATE PASS", { align: "center" });
-    doc.moveDown(0.5);
-    doc.fontSize(14).font("Helvetica").text(gatePass.gatePassNumber, { align: "center" });
-    doc.moveDown(1);
+    doc.fontSize(20).font("Helvetica-Bold").fillColor("#000").text("Waybill / Gate Pass");
+    doc.fontSize(11).font("Helvetica").fillColor(GRAY).text(gatePass.gatePassNumber);
+    doc.fillColor("#000");
+    hr();
 
-    // Header info
-    doc.fontSize(11).font("Helvetica-Bold").text("DISPATCH DETAILS");
-    doc.fontSize(10).font("Helvetica");
-    doc.text(`Kit ID: ${gatePass.kitId}`);
-    doc.text(`Link ID: ${gatePass.linkId || "N/A"}`);
-    doc.text(`Issued: ${new Date(gatePass.dispatchedAt).toLocaleString()}`);
-    doc.text(`Dispatched By: ${gatePass.dispatchedBy}`);
-    doc.moveDown(0.5);
+    field("Kit", gatePass.kitId);
+    field("Link", gatePass.linkId);
+    field("Destination", gatePass.destination);
+    field("Departure", gatePass.warehouseLocation);
+    field(
+      "Vehicle",
+      gatePass.vehicle?.plate
+        ? `${gatePass.vehicle.plate} · ${gatePass.vehicle.make || ""}${gatePass.vehicle.type ? ` (${gatePass.vehicle.type})` : ""}`
+        : null
+    );
+    field(
+      "Driver",
+      gatePass.driver?.name
+        ? `${gatePass.driver.name}${gatePass.driver.phone ? ` · ${gatePass.driver.phone}` : ""}`
+        : null
+    );
+    field("Field Team", null);
 
-    // Vehicle & Driver
-    doc.fontSize(11).font("Helvetica-Bold").text("VEHICLE & DRIVER");
-    doc.fontSize(10).font("Helvetica");
-    doc.text(`Vehicle: ${gatePass.vehicle?.plate || "N/A"} (${gatePass.vehicle?.make})`);
-    doc.text(`Driver: ${gatePass.driver?.name || "N/A"} · ${gatePass.driver?.phone || ""}`);
-    doc.moveDown(0.5);
+    // Items table
+    doc.fontSize(11).font("Helvetica-Bold").text("Items");
+    doc.moveDown(0.4);
 
-    // Assets
-    if (gatePass.assets && gatePass.assets.length > 0) {
-      doc.fontSize(11).font("Helvetica-Bold").text("ASSETS");
-      doc.fontSize(9).font("Helvetica");
-      gatePass.assets.forEach((asset) => {
-        doc.text(`• ${asset.serial} (${asset.type} · ${asset.model})`);
-      });
+    const colItem = left;
+    const colSerial = left + 260;
+    const colQty = right - 40;
+
+    const tableHeadY = doc.y;
+    doc.fontSize(8.5).font("Helvetica-Bold").fillColor(GRAY);
+    doc.text("ITEM", colItem, tableHeadY);
+    doc.text("SERIAL / ASSET ID", colSerial, tableHeadY);
+    doc.text("QTY", colQty, tableHeadY);
+    doc.fillColor("#000");
+    doc.moveDown(0.7);
+    hr();
+
+    doc.fontSize(9.5).font("Helvetica");
+    (gatePass.consumables || []).forEach((c) => {
+      const y = doc.y;
+      doc.text(`Consumable · ${c.model}`, colItem, y, { width: colSerial - colItem - 10 });
+      doc.text("—", colSerial, y);
+      doc.text(String(c.qty), colQty, y);
       doc.moveDown(0.5);
-    }
-
-    // Consumables
-    if (gatePass.consumables && gatePass.consumables.length > 0) {
-      doc.fontSize(11).font("Helvetica-Bold").text("CONSUMABLES");
-      doc.fontSize(9).font("Helvetica");
-      gatePass.consumables.forEach((consumable) => {
-        doc.text(`• ${consumable.qty} ${consumable.unit} · ${consumable.type} (${consumable.model})`);
-      });
-      doc.moveDown(0.5);
-    }
-
-    // Destination
-    doc.fontSize(11).font("Helvetica-Bold").text("DESTINATION");
-    doc.fontSize(10).font("Helvetica");
-    doc.text(`Warehouse: ${gatePass.warehouseLocation}`);
-    doc.text(`Destination: ${gatePass.destination}`);
-    doc.moveDown(1);
-
-    // Footer
-    doc.fontSize(9).font("Helvetica").text("Authorized by warehouse manager on dispatch. Keep this document with shipment.", {
-      align: "center",
-      color: "#666",
     });
+    (gatePass.assets || []).forEach((a) => {
+      const y = doc.y;
+      doc.text(`${a.type} · ${a.model}`, colItem, y, { width: colSerial - colItem - 10 });
+      doc.text(a.serial || "—", colSerial, y);
+      doc.text("1", colQty, y);
+      doc.moveDown(0.5);
+    });
+
+    doc.x = left; // explicit column x's above leave the cursor pinned at colQty
+    hr();
+
+    // Chain of custody
+    doc.fontSize(11).font("Helvetica-Bold").text("Chain of Custody");
+    doc.moveDown(0.8);
+    doc.fontSize(10).font("Helvetica");
+    doc.text("Warehouse Staff Signature: ______________________________");
+    doc.moveDown(0.8);
+    doc.text("Driver Signature: ______________________________");
+    doc.moveDown(0.8);
+    doc.text("Field Team Signature (on receipt): ______________________________");
+    doc.moveDown(1.2);
+
+    doc.fontSize(8).font("Helvetica").fillColor(GRAY).text(
+      `Generated ${new Date().toLocaleString()} — dispatched by ${gatePass.dispatchedBy} on ${new Date(gatePass.dispatchedAt).toLocaleString()}.`
+    );
 
     doc.end();
   } catch (err) {
