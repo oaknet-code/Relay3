@@ -173,6 +173,30 @@ exports.update = async (req, res) => {
         .json({ message: "Can only edit DRAFT kits" });
     }
 
+    // The edit form only lets users change type/model/qtyRequired/sourceType —
+    // it doesn't (and shouldn't) expose qtyAvailable/consumable/assets, which
+    // are managed by allocation/staging. Replacing components wholesale from
+    // the request would wipe those required fields, so merge each incoming
+    // line with its existing subdocument (matched by _id) and only default
+    // them for genuinely new components.
+    if (allowedFields.components) {
+      const existingById = new Map(kit.components.map((c) => [String(c._id), c]));
+      allowedFields.components = allowedFields.components.map((c) => {
+        const existing = c._id ? existingById.get(String(c._id)) : null;
+        return {
+          _id: existing ? existing._id : undefined,
+          type: c.type,
+          model: c.model,
+          unit: c.unit || existing?.unit || "ea",
+          qtyRequired: c.qtyRequired,
+          qtyAvailable: existing ? existing.qtyAvailable : 0,
+          sourceType: c.sourceType || existing?.sourceType || "consumable",
+          consumable: existing ? existing.consumable : (c.consumableId || null),
+          assets: existing ? existing.assets : [],
+        };
+      });
+    }
+
     Object.assign(kit, allowedFields);
     kit.updatedBy = req.user._id;
     await kit.save();
