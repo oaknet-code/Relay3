@@ -45,9 +45,9 @@ const SiteKitSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Recomputes `status` from the component quantities. Call after any
-// import, allocation, or dispatch that changes qtyAvailable. Does not run if the
-// kit has already been fully dispatched.
+// Recomputes `status`. Call after creating/editing a kit or after any
+// import, allocation, or dispatch. Does not run if the kit has already
+// been fully dispatched.
 SiteKitSchema.methods.recomputeStatus = function recomputeStatus() {
   if (this.dispatchedAt) {
     this.status = "DISPATCHED";
@@ -57,14 +57,9 @@ SiteKitSchema.methods.recomputeStatus = function recomputeStatus() {
   if (["STAGING", "STAGED", "INSTALLED"].includes(this.status)) {
     return this.status;
   }
-  // Empty kit is DRAFT until components are added
-  if (!this.components.length) {
-    this.status = "DRAFT";
-    return this.status;
-  }
-  // Check if all components have sufficient stock allocated
-  const allMet = this.components.every((c) => c.qtyAvailable >= c.qtyRequired);
-  this.status = allMet ? "READY_FOR_STAGING" : "DRAFT";
+  // A kit is ready for staging as soon as it has components defined —
+  // staging no longer waits on qtyAvailable meeting qtyRequired first.
+  this.status = this.components.length ? "READY_FOR_STAGING" : "DRAFT";
   return this.status;
 };
 

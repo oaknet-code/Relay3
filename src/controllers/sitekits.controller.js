@@ -77,8 +77,10 @@ exports.create = async (req, res) => {
       return res.status(409).json({ message: "Kit ID already exists" });
     }
 
-    // Create kit with DRAFT status
-    const kit = await SiteKit.create({
+    // Build the kit, then let recomputeStatus() decide DRAFT vs.
+    // READY_FOR_STAGING — a kit with components is staging-eligible right
+    // away, it doesn't need to wait on qtyAvailable/allocation first.
+    const kit = new SiteKit({
       kitId: kitId.toUpperCase(),
       name,
       band,
@@ -93,10 +95,11 @@ exports.create = async (req, res) => {
         consumable: c.consumableId || null,
         assets: [],
       })),
-      status: "DRAFT",
       createdBy: req.user._id,
       updatedBy: req.user._id,
     });
+    kit.recomputeStatus();
+    await kit.save();
 
     // Transition link from PLANNED to KIT_ASSIGNED
     try {
@@ -167,10 +170,13 @@ exports.update = async (req, res) => {
       return res.status(404).json({ message: "Kit not found" });
     }
 
-    if (kit.status !== "DRAFT") {
+    // Staging no longer waits on stock, so a fresh kit goes straight to
+    // READY_FOR_STAGING instead of sitting in DRAFT — editing needs to
+    // stay possible up to the point it's actually checked in to staging.
+    if (!["DRAFT", "READY_FOR_STAGING"].includes(kit.status)) {
       return res
         .status(409)
-        .json({ message: "Can only edit DRAFT kits" });
+        .json({ message: "Can only edit a kit before it's been checked in to staging" });
     }
 
     // The edit form only lets users change type/model/qtyRequired/sourceType —
@@ -198,6 +204,7 @@ exports.update = async (req, res) => {
     }
 
     Object.assign(kit, allowedFields);
+    kit.recomputeStatus();
     kit.updatedBy = req.user._id;
     await kit.save();
 
@@ -229,10 +236,10 @@ exports.delete = async (req, res) => {
       return res.status(404).json({ message: "Kit not found" });
     }
 
-    if (kit.status !== "DRAFT") {
+    if (!["DRAFT", "READY_FOR_STAGING"].includes(kit.status)) {
       return res
         .status(409)
-        .json({ message: "Can only delete DRAFT kits" });
+        .json({ message: "Can only delete a kit before it's been checked in to staging" });
     }
 
     kit.deletedAt = new Date();
