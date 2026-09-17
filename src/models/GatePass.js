@@ -15,11 +15,16 @@ const GatePassSchema = new mongoose.Schema(
     clientName: String,
 
     // Vehicle & driver info
+    // NOTE: a field literally named "type" collides with Mongoose's reserved
+    // SchemaType key — `type: String` here would make Mongoose read the whole
+    // object as "this path's type is String" and silently drop everything
+    // else. Nesting it as `type: { type: String }` avoids that (see
+    // Dispatch.js's VehicleSchema, which already does this correctly).
     vehicle: {
       id: String,
       plate: String,
       make: String,
-      type: String,
+      type: { type: String },
     },
     driver: {
       name: String,
@@ -31,13 +36,13 @@ const GatePassSchema = new mongoose.Schema(
       {
         assetId: { type: mongoose.Schema.Types.ObjectId, ref: "Asset" },
         serial: String,
-        type: String,
+        type: { type: String },
         model: String,
       },
     ],
     consumables: [
       {
-        type: String,
+        type: { type: String },
         model: String,
         qty: Number,
         unit: String,
