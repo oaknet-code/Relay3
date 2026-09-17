@@ -1,117 +1,56 @@
 require("dotenv").config();
+const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const User = require("./src/models/User");
 const connectDB = require("./src/config/db");
 
+// Local-dev convenience only. This used to hardcode real staff emails and
+// identical guessable passwords ("admin123", "manager123", ...) directly in
+// source, unconditionally wiping every existing user first (`User.deleteMany()`)
+// and inserting those accounts fresh. That script was committed to git and
+// run against the shared production database, so those real accounts have
+// been sitting with known passwords in both the live DB and git history.
+//
+// Real accounts are now created and managed through the app itself (the
+// admin-created client-account flow, and admins created directly once via
+// the database) — not by this script. This version only ever creates a
+// single throwaway local admin, never deletes anything, and refuses to run
+// unless explicitly opted into.
 const seedUsers = async () => {
+  if (process.env.SEED_ALLOW !== "true") {
+    console.error(
+      "Refusing to run: set SEED_ALLOW=true if you really want to create a " +
+        "local throwaway admin account. This will NOT delete or modify any " +
+        "existing users."
+    );
+    process.exit(1);
+  }
+
   try {
     await connectDB();
 
-    await User.deleteMany();
+    const email = process.env.SEED_ADMIN_EMAIL || "local-admin@example.test";
 
-    const users = [
-      {
-        username: "admin",
-        email: "admin@relay.com",
-        password: "admin123",
-        role: "admin",
-        firstName: "System",
-        lastName: "Administrator",
-      },
-      {
-        username: "mohamed",
-        email: "mohamed@oaknetbusiness.com",
-        password: "admin123",
-        role: "admin",
-        firstName: "Mohamed",
-        lastName: "Oaknet",
-      },
-      {
-        username: "bashir",
-        email: "bashir@oaknetbusiness.com",
-        password: "admin123",
-        role: "admin",
-        firstName: "Bashir",
-        lastName: "Oaknet",
-      },
-      {
-        username: "shamku",
-        email: "shamku@oaknetbusiness.com",
-        password: "admin123",
-        role: "admin",
-        firstName: "Shamku",
-        lastName: "Oaknet",
-      },
-      {
-        username: "dan",
-        email: "dan.mwangi@oaknetbusiness.com",
-        password: "admin123",
-        role: "admin",
-        firstName: "Dan",
-        lastName: "Mwangi",
-      },
-      {
-        username: "stan",
-        email: "stan@oaknetbusiness.com",
-        password: "admin123",
-        role: "admin",
-        firstName: "Stan",
-        lastName: "Oaknet",
-      },
-      {
-        username: "charles",
-        email: "charles@oaknetbusiness.com",
-        password: "admin123",
-        role: "admin",
-        firstName: "Charles",
-        lastName: "Oaknet",
-      },
-      {
-        username: "elizabeth",
-        email: "elizabethleiyagu441@gmail.com",
-        password: "admin123",
-        role: "admin",
-        firstName: "Elizabeth",
-        lastName: "Leiyagu",
-      },
-      {
-        username: "warehouse_manager",
-        email: "j.okoth@relay.com",
-        password: "manager123",
-        role: "warehouse_manager",
-        firstName: "James",
-        lastName: "Okoth",
-      },
-      {
-        username: "operator",
-        email: "operator@relay.com",
-        password: "operator123",
-        role: "warehouse_operator",
-        firstName: "Field",
-        lastName: "Operator",
-      },
-      {
-        username: "engineer",
-        email: "engineer@relay.com",
-        password: "engineer123",
-        role: "site_engineer",
-        firstName: "Site",
-        lastName: "Engineer",
-      },
-    ];
+    const existing = await User.findOne({ email });
+    if (existing) {
+      console.log(`User ${email} already exists — nothing to do.`);
+      process.exit(0);
+    }
 
-    // Hash each user's password
-    const usersWithHashedPasswords = await Promise.all(
-      users.map(async (user) => ({
-        ...user,
-        password: await bcrypt.hash(user.password, 10),
-      })),
-    );
+    const password = process.env.SEED_ADMIN_PASSWORD || crypto.randomBytes(9).toString("base64url");
+    const hashedPassword = await bcrypt.hash(password, 12);
 
-    await User.insertMany(usersWithHashedPasswords);
+    await User.create({
+      firstName: "Local",
+      lastName: "Admin",
+      email,
+      password: hashedPassword,
+      role: "admin",
+      status: "active",
+    });
 
-    console.log(`✅ MongoDB successfully seeded ${users.length} users!`);
-
+    console.log(`✅ Created local admin ${email}`);
+    console.log(`   Password: ${password}  (shown once — change it after logging in)`);
     process.exit(0);
   } catch (error) {
     console.error("❌ Seeding failed:", error);
